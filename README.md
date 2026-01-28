@@ -27,9 +27,9 @@ Key build arguments / env vars:
 ## Automated Release Flow
 
 1. Update `RC_VERSION` (and matching Deno/sharp args) in the `Dockerfile`, test locally, and merge the change into `main`.
-2. Create an annotated Git tag that matches the release, e.g. `git tag -a v7.9.3 -m "Rocket.Chat 7.9.3"` followed by `git push origin v7.9.3`.
+2. Create an annotated Git tag that matches the release, e.g. `git tag -a v7.10.7 -m "Rocket.Chat 7.10.7"` followed by `git push origin v7.10.7`.
 3. Tag pushes trigger the `Release Rocket.Chat` workflow (`.github/workflows/release.yml`), which publishes a GitHub release using the tag name.
-4. The tag push (and the release it creates) automatically starts the `Docker Publish` workflow, which builds the image and pushes tags for `v7.9.3`, `latest`, and the branch name. (GitHub does not fire release events created via the default `GITHUB_TOKEN`, so the workflow also listens for the tag push itself.)
+4. The tag push (and the release it creates) automatically starts the `Docker Publish` workflow, which builds the image and pushes tags for `v7.10.7`, `latest`, and the branch name. (GitHub does not fire release events created via the default `GITHUB_TOKEN`, so the workflow also listens for the tag push itself.)
 
 ## Runtime Configuration
 
@@ -55,3 +55,5 @@ docker run -d \
 1. Edit `RC_VERSION`, `DENO_VERSION`, `DENO_SHA`, or `SHARP_VERSION` in the `Dockerfile`.
 2. Rebuild locally or trigger the workflow to publish a new image.
 3. Verify Rocket.Chat boots successfully against your MongoDB instance.
+
+Refer to [Rocket.Chat's Version Durability guide](https://docs.rocket.chat/docs/version-durability) when picking which upstream release to package.
