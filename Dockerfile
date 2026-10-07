@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 
 ARG ARCH=aarch64
 ARG DENO_SHA=3771ede34037694591846166f6211e7a8ab5cd77a1e7143e637d4457e8708dc7
