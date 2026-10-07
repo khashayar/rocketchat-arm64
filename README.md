@@ -20,8 +20,9 @@ Key build arguments / env vars:
 
 ## Publish with GitHub Actions
 
-- The `Docker Publish` workflow (`.github/workflows/publish.yml`) is triggered manually (Actions tab → “Run workflow”).
-- It tags every build with `latest`, the branch name, and the Rocket.Chat version extracted from the Dockerfile, plus an OCI label `org.opencontainers.image.version`.
+- The `Docker Publish` workflow (`.github/workflows/publish.yml`) runs on every `v*` tag push and pushes exactly one image tag: the git tag without the `v` (`v8.9.0` → `8.9.0`, `v8.9.0-1` → `8.9.0-1`). The git tag must equal the Dockerfile's `RC_VERSION`, optionally followed by `-N`, or the run fails.
+- **Docker Hub tags are immutable** (rule `.*`): a pushed tag can never be overwritten. That's why there are no `latest` or branch tags. To fix an image for a Rocket.Chat version that's already published (base image, Node, Deno, sharp), push a build-numbered tag such as `v8.9.0-1` and deploy that.
+- A manual run (Actions tab → "Run workflow") on a branch builds without pushing, as a CI smoke test. A manual run on a tag ref publishes like a tag push.
 - To push to a registry, configure the `DOCKER_HUB_USER` and `DOCKER_HUB_TOKEN` (or analogous) secrets before running the workflow. The job will fail fast if they’re missing.
 
 ## Automated Release Flow
@@ -29,7 +30,9 @@ Key build arguments / env vars:
 1. Update `RC_VERSION` (and matching Deno/sharp args) in the `Dockerfile`, test locally, and merge the change into `main`.
 2. Create an annotated Git tag that matches the release, e.g. `git tag -a v7.10.7 -m "Rocket.Chat 7.10.7"` followed by `git push origin v7.10.7`.
 3. Tag pushes trigger the `Release Rocket.Chat` workflow (`.github/workflows/release.yml`), which publishes a GitHub release using the tag name.
-4. The tag push (and the release it creates) automatically starts the `Docker Publish` workflow, which builds the image and pushes tags for `v7.10.7`, `latest`, and the branch name. (GitHub does not fire release events created via the default `GITHUB_TOKEN`, so the workflow also listens for the tag push itself.)
+4. The tag push also starts the `Docker Publish` workflow, which builds the image and pushes `7.10.7`.
+
+Before tagging, check the new release's runtime requirements against the Dockerfile. Rocket.Chat enforces the **Node major version at startup**, and it can be stricter than `package.json` `engines`: 8.9.0 refuses Node 22 even though `engines` allows it. Also check the Deno version in the release notes, and `sharp` in `apps/meteor/package.json`. Production runs a single replica, so an image that won't start means an outage.
 
 ## Runtime Configuration
 

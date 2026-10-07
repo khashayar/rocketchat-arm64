@@ -5,11 +5,18 @@ name: Docker Publish
 # separate terms of service, privacy policy, and support
 # documentation.
 
+# Docker Hub has immutable tags enabled for every tag (rule `.*`), so this
+# workflow only ever pushes version tags, and each one exactly once:
+#   git tag v8.9.0    -> khashayar/rocketchat-arm64:8.9.0
+#   git tag v8.9.0-1  -> khashayar/rocketchat-arm64:8.9.0-1  (rebuild of the
+#                        same Rocket.Chat release, e.g. a base-image fix)
+# No `latest` / branch tags: they would need overwriting, which Docker Hub
+# refuses. A manual run on a branch builds without pushing (smoke test); a
+# manual run on a tag ref publishes like a tag push.
+# The `release: published` trigger was dropped: a release for an existing tag
+# would re-push the same immutable tag and fail.
 on:
   workflow_dispatch:
-  release:
-    types:
-      - published
   push:
     tags:
       - "v*"
@@ -34,7 +41,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Determine Rocket.Chat version
+      - name: Determine Rocket.Chat version and image tag
         id: rc-version
         run: |
           set -euo pipefail
@@ -45,10 +52,26 @@ jobs:
           fi
           echo "version=$rc_version" >> "$GITHUB_OUTPUT"
 
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            image_tag="${GITHUB_REF_NAME#v}"
+            # The git tag must be the Dockerfile's RC_VERSION, optionally
+            # followed by -<build number>. Catches tagging the wrong commit.
+            if ! [[ "$image_tag" =~ ^${rc_version//./\\.}(-[0-9]+)?$ ]]; then
+              echo "Tag ${GITHUB_REF_NAME} does not match RC_VERSION=${rc_version} (expected v${rc_version} or v${rc_version}-N)" >&2
+              exit 1
+            fi
+            echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Not a tag ref (${GITHUB_REF_NAME}): building without pushing"
+            echo "image_tag=${rc_version}-dev" >> "$GITHUB_OUTPUT"
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Login against a Docker registry except on PR
       # https://github.com/docker/login-action
       - name: Verify registry credentials are configured
-        if: github.event_name != 'pull_request'
+        if: steps.rc-version.outputs.push == 'true'
         env:
           DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
           DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
@@ -59,7 +82,7 @@ jobs:
           fi
 
       - name: Log into registry ${{ env.REGISTRY }}
-        if: github.event_name != 'pull_request'
+        if: steps.rc-version.outputs.push == 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -74,9 +97,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value={{branch}}
-            type=raw,value=${{ steps.rc-version.outputs.version }}
+            type=raw,value=${{ steps.rc-version.outputs.image_tag }}
           labels: |
             org.opencontainers.image.version=${{ steps.rc-version.outputs.version }}
 
@@ -88,6 +109,6 @@ jobs:
         with:
           context: .
           platforms: linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ steps.rc-version.outputs.push == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
